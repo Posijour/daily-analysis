@@ -59,4 +59,4 @@ def run_risk_daily(start, end):
         "sessions_pct": sessions_pct,
     }
 
-    supabase_post("daily_risk_snapshot", payload)
+    supabase_post("daily_risk_snapshot", payload, upsert=False)
