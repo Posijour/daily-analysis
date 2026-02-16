@@ -43,7 +43,6 @@ def run_risk_daily(start, end):
         }
 
     risk_0_pct = round((r["risk"] == 0).sum() / total * 100, 2)
-    risk_1_pct = round((r["risk"] == 1).sum() / total * 100, 2)
     risk_2plus_pct = round((r["risk"] >= 2).sum() / total * 100, 2)
 
     payload = {
@@ -54,7 +53,6 @@ def run_risk_daily(start, end):
         "risk_distribution_counts": dist_counts.to_dict(),
         "risk_distribution_pct": dist_pct.to_dict(),
         "risk_0_pct": risk_0_pct,
-        "risk_1_pct": risk_1_pct,
         "risk_2plus_pct": risk_2plus_pct,
         "sessions_counts": sessions_counts,
         "sessions_pct": sessions_pct,
