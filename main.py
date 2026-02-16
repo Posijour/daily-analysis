@@ -1,6 +1,6 @@
 # main.py
 from window import analysis_window_utc
-from job_log import log_job_start, log_job_finish
+from job_log import acquire_daily_lock, finish_daily_job
 
 from deribit_daily import run_deribit_daily
 from options_daily import run_options_daily
@@ -8,8 +8,12 @@ from risk_daily import run_risk_daily
 from meta_daily import run_meta_daily
 from twitter_daily import run_twitter_daily
 
+
 def main():
-    log_job_start()
+    # 🔒 Защита от двойного запуска
+    if not acquire_daily_lock():
+        return
+
     status = "ok"
 
     try:
@@ -24,8 +28,10 @@ def main():
     except Exception:
         status = "failed"
         raise
+
     finally:
-        log_job_finish(status)
+        finish_daily_job(status)
+
 
 if __name__ == "__main__":
     main()
