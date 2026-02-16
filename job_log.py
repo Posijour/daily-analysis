@@ -22,6 +22,7 @@ def acquire_daily_lock() -> bool:
     if existing:
         status = existing[0]["status"]
         if status in ("running", "ok"):
+            print(f"Daily lock denied for {today}: current status is '{status}'.")
             return False
 
     # Пытаемся создать lock
