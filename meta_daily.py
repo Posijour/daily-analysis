@@ -13,6 +13,7 @@ META_SCORE_MAP = {
     "CONFIRMED_STRESS": 90,
 }
 
+
 def base_meta(row):
     risk = row.get("risk", 0)
     regime = row.get("regime")
@@ -29,6 +30,16 @@ def base_meta(row):
     if risk <= 1 and regime == "CALM":
         return "TRUE_CALM"
     return "MIXED"
+
+
+def trading_session(ts):
+    h = ts.hour
+    if h < 8:
+        return "ASIA"
+    if h < 16:
+        return "EU"
+    return "US"
+
 
 def run_meta_daily(start, end):
     risk = load_event("risk_eval", start, end)
@@ -63,3 +74,22 @@ def run_meta_daily(start, end):
     }
 
     supabase_post("daily_meta_v2", payload)
+
+    ts_col = "ts_x" if "ts_x" in df.columns else "ts"
+    if ts_col in df.columns:
+        df["session"] = df[ts_col].apply(trading_session)
+        for s in ["ASIA", "EU", "US"]:
+            sub = df[df["session"] == s]
+            if sub.empty:
+                continue
+            session_dist = sub["meta"].value_counts(normalize=True) * 100
+            session_payload = {
+                "date": end.date().isoformat(),
+                "session": s,
+                "meta_score": round(sub["meta"].map(META_SCORE_MAP).mean(), 1),
+                "dominant_meta": session_dist.idxmax(),
+                "share_hidden_pressure": round(session_dist.get("HIDDEN_PRESSURE", 0), 1),
+                "share_confirmed_stress": round(session_dist.get("CONFIRMED_STRESS", 0), 1),
+                "share_true_calm": round(session_dist.get("TRUE_CALM", 0), 1),
+            }
+            supabase_post("daily_meta_sessions", session_payload)
