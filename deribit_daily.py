@@ -1,4 +1,5 @@
 import pandas as pd
+from requests import HTTPError
 from loaders import load_event
 from supabase import supabase_post
 
@@ -40,4 +41,23 @@ def run_deribit_daily(start, end):
             "ts_to": ts_to,
         }
 
-        supabase_post("daily_deribit_vbi", payload, on_conflict="date_utc,symbol")
+        try:
+            supabase_post("daily_deribit_vbi", payload, on_conflict="date_utc,symbol")
+        except HTTPError as err:
+            status = err.response.status_code if err.response is not None else None
+
+            # Некоторые ключи Supabase (publishable/anon) не имеют прав на upsert через on_conflict.
+            # В таком случае делаем обычный insert и молча пропускаем дубликат (409).
+            if status in (401, 403):
+                try:
+                    supabase_post("daily_deribit_vbi", payload, upsert=False)
+                except HTTPError as insert_err:
+                    insert_status = (
+                        insert_err.response.status_code
+                        if insert_err.response is not None
+                        else None
+                    )
+                    if insert_status != 409:
+                        raise
+            elif status != 409:
+                raise
