@@ -2,6 +2,7 @@
 import requests
 from config import SUPABASE_URL, HEADERS
 
+
 def supabase_get(table, params):
     r = requests.get(
         f"{SUPABASE_URL}/rest/v1/{table}",
@@ -12,14 +13,21 @@ def supabase_get(table, params):
     r.raise_for_status()
     return r.json()
 
-def supabase_post(table, payload):
+
+def supabase_post(table, payload, upsert: bool = True):
+    headers = HEADERS.copy()
+
+    if upsert:
+        headers["Prefer"] = "resolution=merge-duplicates"
+
     r = requests.post(
         f"{SUPABASE_URL}/rest/v1/{table}",
-        headers=HEADERS,
+        headers=headers,
         json=payload,
         timeout=30,
     )
     r.raise_for_status()
+
 
 def supabase_patch(table, params, payload):
     r = requests.patch(
@@ -30,3 +38,4 @@ def supabase_patch(table, params, payload):
         timeout=30,
     )
     r.raise_for_status()
+
