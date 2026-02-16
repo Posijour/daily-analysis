@@ -14,15 +14,19 @@ def supabase_get(table, params):
     return r.json()
 
 
-def supabase_post(table, payload, upsert: bool = True):
+def supabase_post(table, payload, upsert: bool = True, on_conflict: str | None = None):
     headers = HEADERS.copy()
-
+    params = None
+    
     if upsert:
         headers["Prefer"] = "resolution=merge-duplicates"
+        if on_conflict:
+            params = {"on_conflict": on_conflict}
 
     r = requests.post(
         f"{SUPABASE_URL}/rest/v1/{table}",
         headers=headers,
+        params=params,
         json=payload,
         timeout=30,
     )
@@ -38,4 +42,3 @@ def supabase_patch(table, params, payload):
         timeout=30,
     )
     r.raise_for_status()
-
