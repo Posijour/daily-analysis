@@ -40,4 +40,4 @@ def run_deribit_daily(start, end):
             "ts_to": ts_to,
         }
 
-        supabase_post("daily_deribit_vbi", payload)
+        supabase_post("daily_deribit_vbi", payload, on_conflict="date_utc,symbol")
