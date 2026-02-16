@@ -1,4 +1,5 @@
 import pandas as pd
+from requests import HTTPError
 from loaders import load_event
 from supabase import supabase_post
 
@@ -59,4 +60,17 @@ def run_risk_daily(start, end):
         "sessions_pct": sessions_pct,
     }
 
-    supabase_post("daily_risk_snapshot", payload, upsert=False)
+    try:
+        supabase_post("daily_risk_snapshot", payload, upsert=False)
+    except HTTPError as err:
+        status = err.response.status_code if err.response is not None else None
+
+        # Keep job alive for known client-side Supabase failures; re-raise unknowns.
+        if status not in (400, 401, 403, 404, 409):
+            raise
+
+        details = ""
+        if err.response is not None:
+            details = err.response.text[:500]
+        print(f"Risk daily snapshot skipped (HTTP {status}): {details}")
+
