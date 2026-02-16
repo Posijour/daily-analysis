@@ -32,12 +32,16 @@ def main():
         run_twitter_daily(start, end)
         print("Twitter daily completed.")
 
-    except Exception:
+    except Exception as err:
         status = "failed"
+        print(f"Daily analysis failed with error: {err!r}")
         raise
 
     finally:
-        finish_daily_job(status)
+        try:
+            finish_daily_job(status)
+        except Exception as log_err:
+            print(f"Warning: unable to sync daily analysis status to Supabase: {log_err!r}")
         print(f"Daily analysis finished with status: {status}")
 
 if __name__ == "__main__":
