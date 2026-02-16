@@ -12,18 +12,25 @@ from twitter_daily import run_twitter_daily
 def main():
     # 🔒 Защита от двойного запуска
     if not acquire_daily_lock():
+        print("Daily analysis skipped: job already running or completed for today.")
         return
 
     status = "ok"
 
     try:
         start, end = analysis_window_utc()
-
+        print(f"Daily analysis started. Window UTC: {start.isoformat()} -> {end.isoformat()}")
+        
         run_deribit_daily(start, end)
+        print("Deribit daily completed.")
         run_options_daily(start, end)
+        print("Options daily completed.")
         run_risk_daily(start, end)
+        print("Risk daily completed.")
         run_meta_daily(start, end)
+        print("Meta daily completed.")
         run_twitter_daily(start, end)
+        print("Twitter daily completed.")
 
     except Exception:
         status = "failed"
@@ -31,7 +38,7 @@ def main():
 
     finally:
         finish_daily_job(status)
-
+        print(f"Daily analysis finished with status: {status}")
 
 if __name__ == "__main__":
     main()
