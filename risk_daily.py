@@ -2,6 +2,7 @@ import pandas as pd
 from loaders import load_event
 from supabase import supabase_post
 
+
 def trading_session(ts):
     h = ts.hour
     if h < 8:
@@ -9,6 +10,7 @@ def trading_session(ts):
     if h < 16:
         return "EU"
     return "US"
+
 
 def run_risk_daily(start, end):
     df = load_event("risk_eval", start, end)
@@ -36,19 +38,23 @@ def run_risk_daily(start, end):
         }
         sessions_pct[s] = {
             "of_day": round(len(sub) / total * 100, 2),
-            "buildups_in_session": round(
-                (sub["risk"] >= 2).sum() / len(sub) * 100, 2
-            ),
+            "buildups_in_session": round((sub["risk"] >= 2).sum() / len(sub) * 100, 2),
         }
+
+    risk_0_pct = round((r["risk"] == 0).sum() / total * 100, 2)
+    risk_1_pct = round((r["risk"] == 1).sum() / total * 100, 2)
+    risk_2plus_pct = round((r["risk"] >= 2).sum() / total * 100, 2)
 
     payload = {
         "date": end.date().isoformat(),
         "window_start": start.isoformat(),
         "window_end": end.isoformat(),
-
         "total_risk_evals": total,
         "risk_distribution_counts": dist_counts.to_dict(),
         "risk_distribution_pct": dist_pct.to_dict(),
+        "risk_0_pct": risk_0_pct,
+        "risk_1_pct": risk_1_pct,
+        "risk_2plus_pct": risk_2plus_pct,
         "sessions_counts": sessions_counts,
         "sessions_pct": sessions_pct,
     }
