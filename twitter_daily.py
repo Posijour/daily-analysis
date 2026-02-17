@@ -49,6 +49,44 @@ def dominant(series, default_value="UNKNOWN"):
     return clean.value_counts().idxmax()
 
 
+# ---------------- ANOMALIES ----------------
+
+def detect_anomaly(start, end):
+    alerts = load_event("alert_sent", start, end)
+
+    if alerts.empty or "type" not in alerts.columns:
+        return None
+
+    buildup_alerts = alerts[
+        (alerts["type"] == "BUILDUP")
+    ]
+
+    if buildup_alerts.empty:
+        return None
+
+    grouped = (
+        buildup_alerts
+        .groupby("symbol")
+        .size()
+        .sort_values(ascending=False)
+    )
+
+    if grouped.iloc[0] < 3:
+        return None
+
+    symbol = grouped.index[0].replace("USDT", "")
+
+    return f"""Observed anomaly:
+
+{symbol}
+– repeated risk buildups
+– unstable positioning response
+
+Behavior logged."""
+
+
+# ---------------- DAILY LOG ----------------
+
 def generate_daily_log(start, end):
     risk = load_event("risk_eval", start, end)
     alerts_df = load_event("alert_sent", start, end)
@@ -111,17 +149,26 @@ Market log, not a forecast.
     return text
 
 
+# ---------------- MAIN RUN ----------------
+
 def run_twitter_daily(start, end):
-    text = generate_daily_log(start, end)
+    daily_text = generate_daily_log(start, end)
 
     try:
-        supabase_post("twitter_logs", {"text": text})
+        supabase_post("twitter_logs", {"text": daily_text})
     except HTTPError as err:
         status = err.response.status_code if err.response is not None else None
-
-        # Twitter-лог не должен ронять весь daily job
         if status not in (401, 403, 404):
             raise
+
+    anomaly_text = detect_anomaly(start, end)
+    if anomaly_text:
+        try:
+            supabase_post("twitter_logs", {"text": anomaly_text})
+        except HTTPError as err:
+            status = err.response.status_code if err.response is not None else None
+            if status not in (401, 403, 404):
+                raise
 
     if AUTO_POST_TWITTER:
         pass  # Twitter API v2
