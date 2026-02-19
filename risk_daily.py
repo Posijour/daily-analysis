@@ -26,20 +26,25 @@ def run_risk_daily(start, end):
     dist_counts = r["risk"].value_counts().sort_index()
     dist_pct = (dist_counts / total * 100).round(2)
 
+    session_stats = (
+        r.assign(buildup=(r["risk"] >= 2).astype(int))
+        .groupby("session")
+        .agg(total=("risk", "size"), buildups=("buildup", "sum"))
+    )
+
     sessions_counts = {}
     sessions_pct = {}
-
     for s in ["ASIA", "EU", "US"]:
-        sub = r[r["session"] == s]
-        if sub.empty:
+        if s not in session_stats.index:
             continue
+        row = session_stats.loc[s]
         sessions_counts[s] = {
-            "total": int(len(sub)),
-            "buildups": int((sub["risk"] >= 2).sum()),
+            "total": int(row["total"]),
+            "buildups": int(row["buildups"]),
         }
         sessions_pct[s] = {
-            "of_day": round(len(sub) / total * 100, 2),
-            "buildups_in_session": round((sub["risk"] >= 2).sum() / len(sub) * 100, 2),
+            "of_day": round(row["total"] / total * 100, 2),
+            "buildups_in_session": round(row["buildups"] / row["total"] * 100, 2),
         }
 
     risk_0_pct = round((r["risk"] == 0).sum() / total * 100, 2)
@@ -62,13 +67,9 @@ def run_risk_daily(start, end):
         supabase_post("daily_risk_snapshot", payload, upsert=False)
     except HTTPError as err:
         status = err.response.status_code if err.response is not None else None
-
-        # Keep job alive for known client-side Supabase failures; re-raise unknowns.
         if status not in (400, 401, 403, 404, 409):
             raise
-
         details = ""
         if err.response is not None:
             details = err.response.text[:500]
         print(f"Risk daily snapshot skipped (HTTP {status}): {details}")
-
