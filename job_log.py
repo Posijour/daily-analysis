@@ -86,11 +86,15 @@ def acquire_daily_lock() -> bool:
 
 
 def finish_daily_job(status: str = "ok"):
-@@ -63,25 +94,38 @@ def finish_daily_job(status: str = "ok"):
-    }
+    today = date.today().isoformat()
+    finished_at = datetime.utcnow().isoformat()
 
     try:
-        supabase_patch("daily_job_runs", {"date": f"eq.{today}"}, payload)
+        supabase_patch(
+            "daily_job_runs",
+            {"date": f"eq.{today}"},
+            {"finished_at": finished_at, "status": status},
+        )
         print(f"Daily job status synced to Supabase: {status} ({today}).")
     except HTTPError as err:
         code = err.response.status_code if err.response is not None else None
@@ -99,7 +103,7 @@ def finish_daily_job(status: str = "ok"):
         fallback_payload = {
             "date": today,
             "started_at": datetime.utcnow().isoformat(),
-            "finished_at": payload["finished_at"],
+            "finished_at": finished_at,
             "status": status,
         }
         try:
@@ -118,7 +122,7 @@ def finish_daily_job(status: str = "ok"):
             {
                 "date": today,
                 "status": status,
-                "finished_at": payload["finished_at"],
+                "finished_at": finished_at,
                 "backend": "local_fallback",
             }
         )
