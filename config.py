@@ -1,6 +1,16 @@
 # config.py
-SUPABASE_URL = "https://qcusrlmueapuqbjwuwvh.supabase.co"
-SUPABASE_KEY = "sb_publishable_VsMaZGz98nm5lSQZJ-g-kQ_bUOfSO_r"
+import os
+
+
+def _require_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
+
+
+SUPABASE_URL = _require_env("SUPABASE_URL")
+SUPABASE_KEY = _require_env("SUPABASE_KEY")
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -8,4 +18,8 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
-AUTO_POST_TWITTER = True   # ← одним флагом выключаешь автопостинг
+AUTO_POST_TWITTER = os.getenv("AUTO_POST_TWITTER", "true").lower() in {"1", "true", "yes"}
+
+HTTP_TIMEOUT = float(os.getenv("HTTP_TIMEOUT", "30"))
+HTTP_RETRIES = int(os.getenv("HTTP_RETRIES", "3"))
+LOCK_STALE_MINUTES = int(os.getenv("LOCK_STALE_MINUTES", "180"))
