@@ -1,5 +1,4 @@
 # risk_divergence_daily.py
-import pandas as pd
 from loaders import load_event
 from supabase import supabase_post
 
@@ -10,21 +9,16 @@ def run_risk_divergence_daily(start, end):
         return
 
     rows = []
-
-    for _, r in df.iterrows():
+    for r in df.itertuples(index=False):
+        ts = getattr(r, "ts")
         rows.append({
-            "ts": r["ts"].isoformat(),
-            "date": r["ts"].date().isoformat(),
-
-            "symbol": r.get("symbol"),
-
-            "divergence_type": r.get("divergence_type") or r.get("type"),
-            "risk": int(r.get("risk", 0)),
-            "price": r.get("price"),
+            "ts": ts.isoformat(),
+            "date": ts.date().isoformat(),
+            "symbol": getattr(r, "symbol", None),
+            "divergence_type": getattr(r, "divergence_type", None) or getattr(r, "type", None),
+            "risk": int(getattr(r, "risk", 0) or 0),
+            "price": getattr(r, "price", None),
         })
 
-    for payload in rows:
-        supabase_post(
-            "daily_risk_divergences",
-            payload,
-        )
+    if rows:
+        supabase_post("daily_risk_divergences", rows, upsert=False)
