@@ -5,6 +5,8 @@ from job_log import acquire_daily_lock, finish_daily_job
 from deribit_daily import run_deribit_daily
 from options_daily import run_options_daily
 from risk_daily import run_risk_daily
+from risk_daily import run_risk_daily
+from risk_divergence_daily import run_risk_divergence_daily
 from meta_daily import run_meta_daily
 from twitter_daily import run_twitter_daily
 
@@ -27,6 +29,8 @@ def main():
         print("Options daily completed.")
         run_risk_daily(start, end)
         print("Risk daily completed.")
+        run_risk_divergence_daily(start, end)
+        print("Diver daily completed.")
         run_meta_daily(start, end)
         print("Meta daily completed.")
         run_twitter_daily(start, end)
