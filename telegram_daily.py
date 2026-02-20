@@ -149,5 +149,11 @@ def run_telegram_daily(start, end):
         supabase_post("telegram_logs", {"text": daily_text})
     except HTTPError as err:
         status = err.response.status_code if err.response is not None else None
-        if status not in (401, 403, 404):
-            raise
+        if status in (401, 403, 404):
+            response_text = getattr(err.response, "text", "") if err.response is not None else ""
+            raise RuntimeError(
+                "Failed to write daily Telegram log to Supabase table 'telegram_logs' "
+                f"(HTTP {status}). Check SUPABASE_KEY permissions and RLS policies. "
+                f"Supabase response: {response_text}"
+            ) from err
+        raise
