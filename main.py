@@ -13,6 +13,7 @@ from risk_daily import run_risk_daily
 from risk_divergence_daily import run_risk_divergence_daily
 from meta_daily import run_meta_daily
 from twitter_daily import run_twitter_daily
+from telegram_daily import run_telegram_daily
 
 MODULES = [
     ("deribit", run_deribit_daily),
@@ -21,6 +22,7 @@ MODULES = [
     ("risk_divergence", run_risk_divergence_daily),
     ("meta", run_meta_daily),
     ("twitter", run_twitter_daily),
+    ("telegram", run_telegram_daily),
 ]
 
 
