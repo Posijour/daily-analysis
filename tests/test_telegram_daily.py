@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pandas as pd
+from requests import HTTPError
 
 os.environ.setdefault("SUPABASE_URL", "http://localhost:54321")
 os.environ.setdefault("SUPABASE_KEY", "test-key")
@@ -45,6 +46,16 @@ class TelegramDailyTests(unittest.TestCase):
 
         mock_supabase_post.assert_called_once_with("telegram_logs", {"text": "daily telegram text"})
 
+    @patch("telegram_daily.supabase_post")
+    @patch("telegram_daily.generate_daily_log", return_value="daily telegram text")
+    def test_run_telegram_daily_raises_on_rls_error(self, _mock_generate, mock_supabase_post):
+        err = HTTPError("forbidden")
+        err.response = type("Resp", (), {"status_code": 403, "text": "new row violates row-level security policy"})()
+        mock_supabase_post.side_effect = err
+
+        with self.assertRaisesRegex(RuntimeError, "Check SUPABASE_KEY permissions and RLS policies"):
+            run_telegram_daily(datetime.now(timezone.utc), datetime.now(timezone.utc))
+
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest.main(
