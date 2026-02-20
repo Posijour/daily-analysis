@@ -1,6 +1,8 @@
 import pandas as pd
+
 from loaders import load_event
 from supabase import supabase_post
+
 
 def dominant(series, default_value="UNKNOWN", default_pct=0.0):
     clean = series.dropna() if hasattr(series, "dropna") else series
@@ -17,6 +19,20 @@ def session(ts):
     if h < 16:
         return "EU"
     return "US"
+
+
+def _is_true_like(value):
+    if pd.isna(value):
+        return False
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes", "y"}
+    return bool(value)
+
+
+def _series_has_true(series):
+    if series is None or len(series) == 0:
+        return False
+    return any(_is_true_like(value) for value in series)
 
 
 def run_options_daily(start, end):
@@ -40,9 +56,9 @@ def run_options_daily(start, end):
 
     phase_divergence = False
     if "phase_divergence" in market.columns:
-        phase_divergence = bool(market["phase_divergence"].fillna(False).any())
+        phase_divergence = _series_has_true(market["phase_divergence"])
     elif "phase_divergence" in cycle.columns:
-        phase_divergence = bool(cycle["phase_divergence"].fillna(False).any())
+        phase_divergence = _series_has_true(cycle["phase_divergence"])
 
     if "phase_divergence_type" in market.columns:
         phase_divergence_type, _ = dominant(
