@@ -18,13 +18,6 @@ REGIME_INTERPRETATION = {
     ),
 }
 
-REGIME_IMPLICATION = {
-    "CALM": "Implication: stable conditions with low tolerance for complacency.",
-    "CROWD_IMBALANCE": "Implication: reduced tolerance for aggressive exposure.",
-    "STRESS": "Implication: errors are likely to compound.",
-    "UNKNOWN": "Implication: market conditions unclear. Risk framing required.",
-}
-
 OPTIONS_INTERPRETATION = {
     "CALM": "IV stable, skew neutral",
     "NEUTRAL": "IV stable, skew neutral",
@@ -108,7 +101,7 @@ def detect_anomaly(start, end):
 
     symbol = grouped.index[0].replace("USDT", "")
 
-    return f"""Observed anomaly:
+    return f"""Observed anomaly (futures positioning):
 
 {symbol}
 – repeated risk buildups
