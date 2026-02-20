@@ -70,7 +70,7 @@ def deribit_context_payload(deribit: pd.DataFrame) -> dict:
 
     return {
         "deribit_state": state,
-        "deribit_state_share": state_share,
+        "deribit_state_share_pct": state_share,
         "deribit_pattern": pattern,
         "deribit_confidence": confidence,
     }
