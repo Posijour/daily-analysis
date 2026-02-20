@@ -26,11 +26,19 @@ REGIME_IMPLICATION = {
 }
 
 OPTIONS_INTERPRETATION = {
-    "CALM": "Volatility priced neutrally. No directional stress.",
-    "NEUTRAL": "Volatility priced neutrally. No directional stress.",
-    "BUILDING": "Volatility starting to reprice. Early risk premium forming.",
-    "STRESS": "Options pricing reflects elevated tail risk.",
-    "UNKNOWN": "Options market provides no clear signal.",
+    "CALM": "IV stable, skew neutral",
+    "NEUTRAL": "IV stable, skew neutral",
+    "BUILDING": "IV firming, skew bid",
+    "STRESS": "IV elevated, skew defensive",
+    "UNKNOWN": "IV/skew signal mixed",
+}
+
+DERIBIT_VOL_TEXT = {
+    "CALM": "flat vol",
+    "NEUTRAL": "flat vol",
+    "BUILDING": "vol buildup",
+    "STRESS": "elevated vol",
+    "UNKNOWN": "vol mixed",
 }
 
 
@@ -47,6 +55,30 @@ def dominant(series, default_value="UNKNOWN"):
     if clean is None or len(clean) == 0:
         return default_value
     return clean.value_counts().idxmax()
+
+
+def dominant_with_pct(series, default_value="UNKNOWN", default_pct=0.0):
+    clean = series.dropna() if hasattr(series, "dropna") else series
+    if clean is None or len(clean) == 0:
+        return default_value, default_pct
+    vc = clean.value_counts(normalize=True)
+    return vc.index[0], round(vc.iloc[0] * 100, 1)
+
+
+def map_deribit_line(deribit):
+    if deribit.empty:
+        return "vol mixed, no clear pattern", False
+
+    state, _ = dominant_with_pct(deribit["vbi_state"])
+    pattern, pattern_pct = dominant_with_pct(
+        deribit["vbi_pattern"], default_value="NONE", default_pct=0.0
+    )
+
+    state_text = DERIBIT_VOL_TEXT.get(state, DERIBIT_VOL_TEXT["UNKNOWN"])
+    has_pre_break = str(pattern).upper() == "PRE-BREAK" and pattern_pct >= 40
+    pattern_text = "PRE-BREAK active" if has_pre_break else "no PRE-BREAK"
+
+    return f"{state_text}, {pattern_text}", has_pre_break
 
 
 # ---------------- ANOMALIES ----------------
@@ -92,8 +124,8 @@ def generate_daily_log(start, end):
     alerts_df = load_event("alert_sent", start, end)
     market = load_event("market_regime", start, end)
 
-    options_cycle = load_event("options_ticker_cycle", start, end)
     options_market = load_event("options_market_state", start, end)
+    deribit = load_event("deribit_vbi_snapshot", start, end)
 
     total = len(risk)
     elevated = 0
@@ -111,14 +143,6 @@ def generate_daily_log(start, end):
         else "UNKNOWN"
     )
 
-    activity_regime = detect_activity_regime(alerts)
-
-    interpretation = REGIME_INTERPRETATION.get(dominant_regime, "")
-    implication = REGIME_IMPLICATION.get(
-        dominant_regime,
-        REGIME_IMPLICATION["UNKNOWN"],
-    )
-
     options_regime = (
         dominant(options_market["regime"])
         if not options_market.empty and "regime" in options_market.columns
@@ -126,22 +150,26 @@ def generate_daily_log(start, end):
     )
 
     options_text = OPTIONS_INTERPRETATION.get(options_regime, "")
+    deribit_text, has_pre_break = map_deribit_line(deribit)
+
+    low_stress = dominant_regime in ("CALM", "NEUTRAL") and elevated_share < 25
+    summary_line_1 = "Low systemic stress." if low_stress else "Systemic stress is present."
+
+    layers = {dominant_regime, options_regime}
+    layers.discard("UNKNOWN")
+    balanced_layers = len(layers) <= 1 and not has_pre_break
+    summary_line_2 = "Balanced across layers." if balanced_layers else "Layer imbalance detected."
 
     log_number = next_counter("daily_risk_log")
 
-    text = f"""Risk Log #{log_number}
+    text = f"""Risk Log #{log_number} · 24h
 
-24h snapshot
+Futures: {dominant_regime} ({elevated_share}% | {alerts} buildups)
+Options: {options_text}
+Deribit: {deribit_text}
 
-• Elevated risk: {elevated_share}%
-• Buildups: {alerts}
-• Market regime: {dominant_regime}
-• Activity regime: {activity_regime}
-
-{interpretation}
-{options_text}
-
-{implication}
+{summary_line_1}
+{summary_line_2}
 
 Market log, not a forecast.
 """.strip()
