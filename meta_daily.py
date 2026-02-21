@@ -57,7 +57,7 @@ def deribit_context_payload(deribit: pd.DataFrame) -> dict:
     if deribit.empty:
         return {
             "deribit_state": None,
-            "deribit_state_share": None,
+            "deribit_state_share_pct": None,
             "deribit_pattern": None,
             "deribit_confidence": None,
         }
