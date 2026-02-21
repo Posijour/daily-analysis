@@ -149,9 +149,26 @@ def run_meta_daily(start, end):
         dominant_divergence = None
         divergence_conf_avg = None
     else:
+        divergence_type_col = None
+        for candidate in ("divergence_type", "type"):
+            if candidate in divergence.columns:
+                divergence_type_col = candidate
+                break
+
+        confidence_source = divergence["confidence"] if "confidence" in divergence.columns else pd.Series(dtype="float64")
+        confidence_series = pd.to_numeric(confidence_source, errors="coerce")
         divergence_share = round(len(divergence) / len(risk) * 100, 1) if not risk.empty else None
-        dominant_divergence = divergence["divergence_type"].value_counts().idxmax()
-        divergence_conf_avg = round(divergence["confidence"].mean(), 2)
+        dominant_divergence = None
+        if divergence_type_col:
+            divergence_types = divergence[divergence_type_col].dropna()
+            if not divergence_types.empty:
+                dominant_divergence = divergence_types.value_counts().idxmax()
+
+        divergence_conf_avg = None
+        if confidence_series is not None:
+            confidence_series = confidence_series.dropna()
+            if not confidence_series.empty:
+                divergence_conf_avg = round(float(confidence_series.mean()), 2)
 
     # ---------- DAILY META PAYLOAD ----------
     payload = {
