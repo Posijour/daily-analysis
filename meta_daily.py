@@ -95,11 +95,10 @@ def post_with_optional_columns(table: str, base_payload: dict, optional_payload:
         try:
             return supabase_post(table, payload)
         except HTTPError as err:
-            status = err.response.status_code if err.response is not None else None
-            response_text = getattr(err.response, "text", "") if err.response is not None else ""
-
-            if status != 400:
-                raise
+            print("----- SUPABASE ERROR -----")
+            print(err.response.text)
+            print("--------------------------")
+            raise
 
             unknown_column = _extract_unknown_column(response_text)
             if not unknown_column or unknown_column not in payload:
