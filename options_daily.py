@@ -4,7 +4,7 @@ from loaders import load_event
 from supabase import supabase_post
 
 
-DAILY_OPTIONS_TABLE = "daily_options_analysis_v2"
+DAILY_OPTIONS_TABLE = "daily_options_analysis"
 
 
 def dominant(series, default_value="UNKNOWN", default_pct=0.0):
