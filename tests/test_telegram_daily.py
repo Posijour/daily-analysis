@@ -39,11 +39,24 @@ class TelegramDailyTests(unittest.TestCase):
         self.assertIn("• No PRE-BREAK patterns", text)
         self.assertIn("Market log.", text)
 
+    @patch("telegram_daily.next_counter", return_value=20)
+    @patch("telegram_daily.load_event")
+    def test_generate_daily_log_without_deribit_pattern_column(self, mock_load_event, _mock_counter):
+        mock_load_event.side_effect = [
+            pd.DataFrame({"risk": [1, 2]}),
+            pd.DataFrame({"type": []}),
+            pd.DataFrame({"regime": ["CALM"]}),
+            pd.DataFrame({"regime": ["CALM"]}),
+            pd.DataFrame({"vbi_state": ["CALM", "CALM"]}),
+        ]
+
+        text = generate_daily_log(datetime.now(timezone.utc), datetime.now(timezone.utc))
+        self.assertIn("• Vol term structure flat", text)
+
     @patch("telegram_daily.supabase_post")
     @patch("telegram_daily.generate_daily_log", return_value="daily telegram text")
     def test_run_telegram_daily_posts_log(self, _mock_generate, mock_supabase_post):
         run_telegram_daily(datetime.now(timezone.utc), datetime.now(timezone.utc))
-
         mock_supabase_post.assert_called_once_with("telegram_logs", {"text": "daily telegram text"})
 
     @patch("telegram_daily.supabase_post")
@@ -58,4 +71,4 @@ class TelegramDailyTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main(
+    unittest.main()
