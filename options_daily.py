@@ -1,4 +1,5 @@
 import pandas as pd
+from requests import HTTPError
 
 from loaders import load_event
 from supabase import supabase_post
@@ -120,4 +121,15 @@ def run_options_daily(start, end):
 
     payload["session_breakdown"] = session_breakdown
 
-    supabase_post(DAILY_OPTIONS_TABLE, payload)
+    try:
+        supabase_post(DAILY_OPTIONS_TABLE, payload)
+    except HTTPError as err:
+        status = err.response.status_code if err.response is not None else None
+        if status in (401, 403, 404):
+            response_text = getattr(err.response, "text", "") if err.response is not None else ""
+            raise RuntimeError(
+                "Failed to write daily options analysis to Supabase table "
+                f"'{DAILY_OPTIONS_TABLE}' (HTTP {status}). Check SUPABASE_KEY permissions and RLS policies. "
+                f"Supabase response: {response_text}"
+            ) from err
+        raise
