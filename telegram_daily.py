@@ -49,9 +49,10 @@ def map_deribit_summary(deribit):
     if deribit.empty:
         return "mixed", False
 
-    state, _ = dominant_with_pct(deribit["vbi_state"])
+    state, _ = dominant_with_pct(deribit.get("vbi_state"), default_value="UNKNOWN", default_pct=0.0)
+    pattern_source = deribit.get("vbi_pattern")
     pattern, pattern_pct = dominant_with_pct(
-        deribit["vbi_pattern"], default_value="NONE", default_pct=0.0
+        pattern_source, default_value="NONE", default_pct=0.0
     )
 
     has_pre_break = str(pattern).upper() == "PRE-BREAK" and pattern_pct >= 40
