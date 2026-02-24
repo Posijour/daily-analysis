@@ -65,6 +65,33 @@ class OptionsDailyTests(unittest.TestCase):
         self.assertIn("ASIA", payload["session_breakdown"])
         self.assertIn("US", payload["session_breakdown"])
 
+
+    @patch("options_daily.supabase_post")
+    @patch("options_daily.load_event")
+    def test_run_options_daily_handles_none_divergence_diff(self, mock_load_event, mock_supabase_post):
+        ts = pd.Timestamp(datetime(2026, 2, 20, 10, 0, tzinfo=timezone.utc))
+        cycle = pd.DataFrame(
+            {
+                "ts": [ts, ts],
+                "symbol": ["BTC", "ETH"],
+                "regime": ["CALM", "CALM"],
+                "mci": [0.7, 0.8],
+                "mci_slope": [0.01, 0.01],
+                "mci_phase": ["OVERCOMPRESSED", "OVERCOMPRESSED"],
+                "mci_phase_confidence": [0.7, 0.8],
+                "divergence": ["STRONG", "NONE"],
+                "divergence_diff": [0.7, None],
+                "phase_divergence": [None, None],
+            }
+        )
+        market = pd.DataFrame({"symbol": ["MARKET"]})
+        mock_load_event.side_effect = [cycle, market]
+
+        run_options_daily(datetime.now(timezone.utc), datetime.now(timezone.utc))
+
+        payload = mock_supabase_post.call_args.args[1]
+        self.assertEqual(payload["divergence_diff_abs_avg"], 0.7)
+
     @patch("options_daily.supabase_post")
     @patch("options_daily.load_event")
     def test_run_options_daily_no_cycle_data(self, mock_load_event, mock_supabase_post):
