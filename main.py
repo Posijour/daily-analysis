@@ -58,7 +58,7 @@ def main():
         try:
             finish_daily_job(status)
         except Exception as log_err:
-            log_event("daily.status_sync.failed", run_id=run_id, error=str(log_err)
+            log_event("daily.status_sync.failed", run_id=run_id, error=str(log_err))
 
         elapsed = round(perf_counter() - t0, 3)
         log_event(
