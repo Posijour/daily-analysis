@@ -4,7 +4,7 @@ from loaders import load_event
 from supabase import supabase_post
 
 
-DAILY_OPTIONS_TABLE = "daily_options_analysis"
+DAILY_OPTIONS_TABLE = "daily_options_analysis_v2"
 
 
 def dominant(series, default_value="UNKNOWN", default_pct=0.0):
@@ -68,7 +68,7 @@ def run_options_daily(start, end):
 
     payload["okx_olsi_avg"] = _to_numeric_mean(cycle.get("okx_olsi"), 4)
     payload["okx_olsi_slope_avg"] = _to_numeric_mean(cycle.get("okx_olsi_slope"), 4)
-        
+
     payload["dominant_liquidity_phase"], payload["dominant_liquidity_phase_pct"] = dominant(
         cycle.get("liquidity_phase"), default_value="UNKNOWN", default_pct=0.0
     )
@@ -82,7 +82,11 @@ def run_options_daily(start, end):
     payload["dominant_divergence_level"], payload["dominant_divergence_level_pct"] = dominant(
         divergence_series, default_value="NONE", default_pct=0.0
     )
-    payload["divergence_diff_abs_avg"] = _to_numeric_mean(cycle.get("divergence_diff").abs(), 4) if "divergence_diff" in cycle else None
+    if "divergence_diff" in cycle.columns:
+        divergence_diff_abs = pd.to_numeric(cycle.get("divergence_diff"), errors="coerce").abs()
+        payload["divergence_diff_abs_avg"] = _to_numeric_mean(divergence_diff_abs, 4)
+        
+        payload["divergence_diff_abs_avg"] = None
 
     phase_divergence_series = _clean_signal_series(cycle.get("phase_divergence"))
     payload["phase_divergence_share_pct"] = round(len(phase_divergence_series) / len(cycle) * 100, 1)
