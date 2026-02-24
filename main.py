@@ -50,7 +50,7 @@ def main():
             except Exception as err:
                 status = "failed"
                 module_status[module_name] = f"failed:{type(err).__name__}"
-                log_event("daily.module.failed", run_id=run_id, module=module_name, error=repr(err))
+                log_event("daily.module.failed", run_id=run_id, module=module_name, error=str(err))
             finally:
                 METRICS.stop(module_name)
 
@@ -58,7 +58,7 @@ def main():
         try:
             finish_daily_job(status)
         except Exception as log_err:
-            log_event("daily.status_sync.failed", run_id=run_id, error=repr(log_err))
+            log_event("daily.status_sync.failed", run_id=run_id, error=str(log_err)
 
         elapsed = round(perf_counter() - t0, 3)
         log_event(
