@@ -3,7 +3,14 @@ from requests import HTTPError
 from counters import next_counter
 from loaders import load_event
 from supabase import supabase_post
-from config import AUTO_POST_TWITTER
+from config import (
+    AUTO_POST_TWITTER,
+    TWITTER_API_KEY,
+    TWITTER_API_SECRET,
+    TWITTER_ACCESS_TOKEN,
+    TWITTER_ACCESS_TOKEN_SECRET,
+)
+from twitter_api import post_tweet
 
 
 REGIME_INTERPRETATION = {
@@ -205,4 +212,34 @@ def run_twitter_daily(start, end):
             raise
 
     if AUTO_POST_TWITTER:
-        pass  # Twitter API v2
+        missing = [
+            name
+            for name, value in [
+                ("TWITTER_API_KEY", TWITTER_API_KEY),
+                ("TWITTER_API_SECRET", TWITTER_API_SECRET),
+                ("TWITTER_ACCESS_TOKEN", TWITTER_ACCESS_TOKEN),
+                ("TWITTER_ACCESS_TOKEN_SECRET", TWITTER_ACCESS_TOKEN_SECRET),
+            ]
+            if not value
+        ]
+        if missing:
+            raise RuntimeError(
+                "AUTO_POST_TWITTER is enabled but missing Twitter credentials: " + ", ".join(missing)
+            )
+
+        try:
+            post_tweet(
+                daily_text,
+                api_key=TWITTER_API_KEY,
+                api_secret=TWITTER_API_SECRET,
+                access_token=TWITTER_ACCESS_TOKEN,
+                access_token_secret=TWITTER_ACCESS_TOKEN_SECRET,
+            )
+        except HTTPError as err:
+            status = err.response.status_code if err.response is not None else None
+            response_text = getattr(err.response, "text", "") if err.response is not None else ""
+            raise RuntimeError(
+                "Failed to auto-post daily Twitter log "
+                f"(HTTP {status}). Check Twitter app credentials and token permissions. "
+                f"Twitter response: {response_text}"
+            ) from err
