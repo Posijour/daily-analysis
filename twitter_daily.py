@@ -69,10 +69,17 @@ def map_deribit_line(deribit):
     if deribit.empty:
         return "vol mixed, no clear pattern", False
 
-    state, _ = dominant_with_pct(deribit.get("vbi_state"), default_value="UNKNOWN", default_pct=0.0)
+    state, _ = dominant_with_pct(
+        deribit.get("vbi_state"),
+        default_value="UNKNOWN",
+        default_pct=0.0,
+    )
+
     pattern_source = deribit.get("vbi_pattern")
     pattern, pattern_pct = dominant_with_pct(
-                pattern_source, default_value="NONE", default_pct=0.0
+        pattern_source,
+        default_value="NONE",
+        default_pct=0.0,
     )
 
     state_text = DERIBIT_VOL_TEXT.get(state, DERIBIT_VOL_TEXT["UNKNOWN"])
@@ -90,6 +97,7 @@ def detect_anomaly(start, end):
     if alerts.empty or "type" not in alerts.columns:
         return None
 
+    # --- anomaly 1: repeated buildups per symbol (existing logic) ---
     buildup_alerts = alerts[
         (alerts["type"] == "BUILDUP")
     ]
@@ -104,18 +112,32 @@ def detect_anomaly(start, end):
         .sort_values(ascending=False)
     )
 
-    if grouped.iloc[0] < 3:
-        return None
-
-    symbol = grouped.index[0].replace("USDT", "")
-
-    return f"""Observed anomaly (futures positioning):
+    if grouped.iloc[0] >= 3:
+        symbol = grouped.index[0].replace("USDT", "")
+        return f"""Observed anomaly (futures positioning):
 
 {symbol}
 – repeated risk buildups
 – unstable positioning response
 
 Behavior logged."""
+
+    # --- anomaly 2: >4 buildups within 3 minutes (ticker & direction agnostic) ---
+    if "timestamp" in buildup_alerts.columns:
+        ts = buildup_alerts["timestamp"].sort_values()
+
+        if len(ts) >= 5:
+            window = ts.diff().dt.total_seconds().rolling(4).sum()
+            if (window <= 180).any():
+                return f"""Observed anomaly (activity burst):
+
+Multiple buildups within 3 minutes
+– ticker-agnostic
+– direction-agnostic
+
+Short-term activity spike logged."""
+
+    return None
 
 
 # ---------------- DAILY LOG ----------------
