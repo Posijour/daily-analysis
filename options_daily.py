@@ -6,7 +6,12 @@ from supabase import supabase_post
 
 
 DAILY_OPTIONS_TABLE = "daily_options_analysis"
+DAILY_META_SESSIONS_TABLE = "daily_meta_sessions"
 
+
+# ======================
+# helpers
+# ======================
 
 def dominant(series, default_value="UNKNOWN", default_pct=0.0):
     if series is None or len(series) == 0:
@@ -39,6 +44,19 @@ def _to_numeric_mean(series, digits):
     return round(float(values.mean()), digits)
 
 
+def session(ts):
+    h = ts.hour
+    if h < 8:
+        return "ASIA"
+    if h < 16:
+        return "EU"
+    return "US"
+
+
+# ======================
+# main
+# ======================
+
 def run_options_daily(start, end):
     bybit = load_event("bybit_market_state", start, end)
     okx = load_event("okx_market_state", start, end)
@@ -46,41 +64,41 @@ def run_options_daily(start, end):
     if bybit.empty and okx.empty:
         return
 
+    # --------------------------------------------------
+    # DAILY OPTIONS ANALYSIS (НЕ ТРОГАЕМ ЛОГИКУ)
+    # --------------------------------------------------
+
     payload = {
         "window_start": start.isoformat(),
         "window_end": end.isoformat(),
     }
 
-    # ======================
-    # BYBIT MARKET STATE
-    # ======================
+    # ----- BYBIT -----
     if not bybit.empty:
         payload["bybit_mci_avg"] = _to_numeric_mean(bybit.get("mci"), 2)
         payload["bybit_mci_slope_avg"] = _to_numeric_mean(bybit.get("mci_slope"), 3)
         payload["bybit_confidence_avg"] = _to_numeric_mean(bybit.get("confidence"), 2)
 
         payload["dominant_bybit_regime"], payload["dominant_bybit_regime_pct"] = dominant(
-            bybit.get("regime"), default_value="UNKNOWN", default_pct=0.0
+            bybit.get("regime"), "UNKNOWN", 0.0
         )
 
         payload["dominant_bybit_phase"], payload["dominant_bybit_phase_pct"] = dominant(
-            bybit.get("mci_phase"), default_value="UNKNOWN", default_pct=0.0
+            bybit.get("mci_phase"), "UNKNOWN", 0.0
         )
 
-    # ======================
-    # OKX MARKET STATE
-    # ======================
+    # ----- OKX -----
     if not okx.empty:
         payload["okx_olsi_avg"] = _to_numeric_mean(okx.get("okx_olsi_avg"), 4)
         payload["okx_olsi_slope_avg"] = _to_numeric_mean(okx.get("okx_olsi_slope"), 4)
 
         payload["dominant_okx_liquidity_regime"], payload["dominant_okx_liquidity_regime_pct"] = dominant(
-            okx.get("okx_liquidity_regime"), default_value="UNKNOWN", default_pct=0.0
+            okx.get("okx_liquidity_regime"), "UNKNOWN", 0.0
         )
 
         divergence_series = _clean_signal_series(okx.get("divergence"))
         payload["dominant_divergence"], payload["dominant_divergence_pct"] = dominant(
-            divergence_series, default_value="NONE", default_pct=0.0
+            divergence_series, "NONE", 0.0
         )
 
         payload["divergence_strength_avg"] = _to_numeric_mean(
@@ -91,15 +109,64 @@ def run_options_daily(start, end):
             okx.get("divergence_diff"), 4
         )
 
-    try:
-        supabase_post(DAILY_OPTIONS_TABLE, payload)
-    except HTTPError as err:
-        status = err.response.status_code if err.response is not None else None
-        if status in (401, 403, 404):
-            response_text = getattr(err.response, "text", "") if err.response is not None else ""
-            raise RuntimeError(
-                "Failed to write daily options analysis to Supabase table "
-                f"'{DAILY_OPTIONS_TABLE}' (HTTP {status}). "
-                f"Supabase response: {response_text}"
-            ) from err
-        raise
+    supabase_post(DAILY_OPTIONS_TABLE, payload)
+
+    # --------------------------------------------------
+    # SESSION META (НОВОЕ, В ОТДЕЛЬНУЮ ТАБЛИЦУ)
+    # --------------------------------------------------
+
+    # готовим данные
+    if not bybit.empty:
+        bybit = bybit.copy()
+        bybit["session"] = bybit["ts"].apply(session)
+
+    if not okx.empty:
+        okx = okx.copy()
+        okx["session"] = okx["ts"].apply(session)
+
+    day = start.date().isoformat()
+
+    for s in ["ASIA", "EU", "US"]:
+        rows = []
+
+        # ---------- BYBIT SESSION META ----------
+        if not bybit.empty:
+            sub = bybit[bybit["session"] == s]
+            if not sub.empty:
+                dominant_phase, _ = dominant(sub.get("mci_phase"))
+                dominant_regime, _ = dominant(sub.get("regime"))
+
+                rows.append({
+                    "date": day,
+                    "session": s,
+                    "meta_score": round(_to_numeric_mean(sub.get("confidence"), 2) or 0, 1),
+                    "dominant_meta": dominant_phase,
+                    "share_hidden_pressure": 0,
+                    "share_confirmed_stress": round(
+                        len(sub[sub["regime"] == "DIRECTIONAL_DOWN"]) / len(sub) * 100, 1
+                    ),
+                    "share_true_calm": round(
+                        len(sub[sub["regime"] == "CALM"]) / len(sub) * 100, 1
+                    ),
+                })
+
+        # ---------- OKX SESSION META ----------
+        if not okx.empty:
+            sub = okx[okx["session"] == s]
+            if not sub.empty:
+                dominant_liquidity, _ = dominant(sub.get("okx_liquidity_regime"))
+                dominant_div, _ = dominant(_clean_signal_series(sub.get("divergence")))
+
+                rows.append({
+                    "date": day,
+                    "session": s,
+                    "meta_score": round(_to_numeric_mean(sub.get("divergence_strength"), 2) or 0, 1),
+                    "dominant_meta": dominant_div,
+                    "share_hidden_pressure": 0,
+                    "share_confirmed_stress": 0,
+                    "share_true_calm": 0,
+                })
+
+        # запись (одна строка на сессию)
+        for r in rows:
+            supabase_post(DAILY_META_SESSIONS_TABLE, r)
