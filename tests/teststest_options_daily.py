@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pandas as pd
+from requests import HTTPError
 
 os.environ.setdefault("SUPABASE_URL", "http://localhost:54321")
 os.environ.setdefault("SUPABASE_KEY", "test-key")
@@ -100,6 +101,41 @@ class OptionsDailyTests(unittest.TestCase):
         run_options_daily(datetime.now(timezone.utc), datetime.now(timezone.utc))
 
         mock_supabase_post.assert_not_called()
+
+
+    @patch("options_daily.load_event")
+    @patch("options_daily.supabase_post")
+    def test_run_options_daily_skips_expected_http_errors(self, mock_supabase_post, mock_load_event):
+        ts = pd.Timestamp(datetime(2026, 2, 20, 3, 0, tzinfo=timezone.utc))
+        bybit = pd.DataFrame(
+            {
+                "ts": [ts],
+                "mci": [0.8],
+                "mci_slope": [0.01],
+                "confidence": [0.7],
+                "regime": ["CALM"],
+                "mci_phase": ["STABLE"],
+            }
+        )
+        okx = pd.DataFrame(
+            {
+                "ts": [ts],
+                "okx_olsi_avg": [0.4],
+                "okx_olsi_slope": [0.01],
+                "okx_liquidity_regime": ["LIQUIDITY_FLAT"],
+                "divergence": ["NONE"],
+                "divergence_strength": [0.1],
+                "divergence_diff": [0.01],
+            }
+        )
+        mock_load_event.side_effect = [bybit, okx]
+
+        err = HTTPError("unauthorized")
+        err.response = type("Resp", (), {"status_code": 401, "text": "Unauthorized"})()
+        mock_supabase_post.side_effect = err
+
+        # Should not raise for expected schema/permission errors.
+        run_options_daily(datetime.now(timezone.utc), datetime.now(timezone.utc))
 
 
 if __name__ == "__main__":
