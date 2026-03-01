@@ -120,7 +120,7 @@ def generate_daily_log(start, end):
     deribit_pre_break_line = "PRE-BREAK patterns active" if has_pre_break else "No PRE-BREAK patterns"
 
     notes = map_notes(futures_regime, options_regime, has_pre_break)
-    log_number = next_counter("daily_telegram_log")
+    log_number = next_counter("tg_daily_log")
 
     return f"""Risk Log #{log_number}
 24h snapshot
