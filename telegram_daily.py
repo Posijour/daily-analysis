@@ -3,6 +3,8 @@ from requests import HTTPError
 from counters import next_counter
 from loaders import load_event
 from supabase import supabase_post
+from config import AUTO_POST_TELEGRAM, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from telegram_api import post_telegram_message
 
 
 OPTIONS_IV_TEXT = {
@@ -158,3 +160,32 @@ def run_telegram_daily(start, end):
                 f"Supabase response: {response_text}"
             ) from err
         raise
+
+    if AUTO_POST_TELEGRAM:
+        missing = [
+            name
+            for name, value in [
+                ("TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN),
+                ("TELEGRAM_CHAT_ID", TELEGRAM_CHAT_ID),
+            ]
+            if not value
+        ]
+        if missing:
+            raise RuntimeError(
+                "AUTO_POST_TELEGRAM is enabled but missing Telegram credentials: " + ", ".join(missing)
+            )
+
+        try:
+            post_telegram_message(
+                daily_text,
+                bot_token=TELEGRAM_BOT_TOKEN,
+                chat_id=TELEGRAM_CHAT_ID,
+            )
+        except HTTPError as err:
+            status = err.response.status_code if err.response is not None else None
+            response_text = getattr(err.response, "text", "") if err.response is not None else ""
+            raise RuntimeError(
+                "Failed to auto-post daily Telegram log "
+                f"(HTTP {status}). Check Telegram bot token/chat id and bot permissions. "
+                f"Telegram response: {response_text}"
+            ) from err
