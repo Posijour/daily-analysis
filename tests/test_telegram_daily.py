@@ -13,9 +13,9 @@ from telegram_daily import generate_daily_log, run_telegram_daily
 
 
 class TelegramDailyTests(unittest.TestCase):
-    @patch("telegram_daily.next_counter", return_value=20)
-    @patch("telegram_daily.load_event")
-    def test_generate_daily_log_format(self, mock_load_event, _mock_counter):
+    @patch("telegram_daily.next_counter", return_value=20)␊
+    @patch("telegram_daily.load_event")␊
+    def test_generate_daily_log_format(self, mock_load_event, mock_counter):
         mock_load_event.side_effect = [
             pd.DataFrame({"risk": [2, 1, 0, 3, 2, 1, 0, 1, 2, 1, 0, 1, 3]}),
             pd.DataFrame({"type": ["BUILDUP"] * 17}),
@@ -38,6 +38,7 @@ class TelegramDailyTests(unittest.TestCase):
         self.assertIn("• Vol term structure flat", text)
         self.assertIn("• No PRE-BREAK patterns", text)
         self.assertIn("Market log.", text)
+        mock_counter.assert_called_once_with("daily_telegram_log")
 
     @patch("telegram_daily.next_counter", return_value=20)
     @patch("telegram_daily.load_event")
@@ -72,3 +73,4 @@ class TelegramDailyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
