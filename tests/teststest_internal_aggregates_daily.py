@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 import unittest
 
 import pandas as pd
+from requests import HTTPError
 
 from internal_aggregates_daily import (
     _build_layer_metrics,
@@ -90,6 +91,36 @@ class InternalAggregatesTests(unittest.TestCase):
         self.assertFalse(recorded["upsert"])
         rows = recorded["payload"]
         self.assertTrue(all(set(row.keys()) == {"date", "layer", "metric", "value"} for row in rows))
+
+
+    def test_run_internal_aggregates_daily_skips_expected_http_errors(self):
+        start = datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
+        end = start + timedelta(days=1)
+
+        cycle_df = pd.DataFrame({"ts": [start], "regime": ["CALM"]})
+        market_df = pd.DataFrame({"ts": [start], "volatility_state": ["LOW"]})
+        divergence_df = pd.DataFrame({"ts": [start]})
+
+        def fake_load_event(event, _start, _end):
+            return {
+                "options_ticker_cycle": cycle_df,
+                "options_market_state": market_df,
+                "risk_divergence": divergence_df,
+            }[event]
+
+        err = HTTPError("bad request")
+        err.response = type("Resp", (), {"status_code": 400, "text": "invalid input syntax"})()
+
+        def failing_supabase_post(_table, _payload, upsert=False):
+            raise err
+
+        # Should not raise for expected schema/permission errors.
+        run_internal_aggregates_daily(
+            start,
+            end,
+            load_event_fn=fake_load_event,
+            supabase_post_fn=failing_supabase_post,
+        )
 
 
 if __name__ == "__main__":
