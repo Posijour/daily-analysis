@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any
 
 import pandas as pd
+from requests import HTTPError
 
 
 STRUCTURE_LAYER = "market_structure"
@@ -238,4 +239,11 @@ def run_internal_aggregates_daily(
         _metric_row(end.date().isoformat(), CONTEXT_LAYER, "window_alignment_frequency", alignment),
     ]
 
-    supabase_post_fn("daily_aggregates", rows, upsert=False)
+    try:
+        supabase_post_fn("daily_aggregates", rows, upsert=False)
+    except HTTPError as err:
+        status = err.response.status_code if err.response is not None else None
+        if status not in (400, 401, 403, 404, 409):
+            raise
+        details = err.response.text[:500] if err.response is not None else ""
+        print(f"Internal aggregates daily write skipped (HTTP {status}): {details}")
