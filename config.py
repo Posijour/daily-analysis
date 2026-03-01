@@ -19,11 +19,15 @@ HEADERS = {
 }
 
 AUTO_POST_TWITTER = os.getenv("AUTO_POST_TWITTER", "true").lower() in {"1", "true", "yes"}
+AUTO_POST_TELEGRAM = os.getenv("AUTO_POST_TELEGRAM", "true").lower() in {"1", "true", "yes"}
 
 TWITTER_API_KEY = os.getenv("TWITTER_API_KEY")
 TWITTER_API_SECRET = os.getenv("TWITTER_API_SECRET")
 TWITTER_ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
 TWITTER_ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 HTTP_TIMEOUT = float(os.getenv("HTTP_TIMEOUT", "30"))
 HTTP_RETRIES = int(os.getenv("HTTP_RETRIES", "3"))
