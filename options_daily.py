@@ -53,6 +53,17 @@ def session(ts):
     return "US"
 
 
+def _post_or_skip(table: str, payload):
+    try:
+        return supabase_post(table, payload)
+    except HTTPError as err:
+        status = err.response.status_code if err.response is not None else None
+        if status not in (400, 401, 403, 404, 409):
+            raise
+        details = err.response.text[:500] if err.response is not None else ""
+        print(f"Options daily write skipped for {table} (HTTP {status}): {details}")
+        return None
+
 # ======================
 # main
 # ======================
@@ -109,7 +120,7 @@ def run_options_daily(start, end):
             okx.get("divergence_diff"), 4
         )
 
-    supabase_post(DAILY_OPTIONS_TABLE, payload)
+    _post_or_skip(DAILY_OPTIONS_TABLE, payload)
 
     # --------------------------------------------------
     # SESSION META (НОВОЕ, В ОТДЕЛЬНУЮ ТАБЛИЦУ)
@@ -169,4 +180,4 @@ def run_options_daily(start, end):
 
         # запись (одна строка на сессию)
         for r in rows:
-            supabase_post(DAILY_META_SESSIONS_TABLE, r)
+            _post_or_skip(DAILY_META_SESSIONS_TABLE, r)
