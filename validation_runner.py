@@ -1,6 +1,8 @@
 import os
 import math
 import time
+from datetime import datetime
+
 import requests
 from typing import Any, Dict, List, Optional, Tuple
 from collections import Counter, defaultdict
@@ -446,13 +448,9 @@ def run_one_signal(
             print(f"[validation] FAILED {signal_key} H{H}: {e}", flush=True)
 
 
-def main():
+def run_validation_runner(t_start: int, t_end: int) -> None:
     if not SUPABASE_URL or not SUPABASE_KEY:
         raise RuntimeError("SUPABASE_URL / SUPABASE_KEY env missing")
-
-    now = ms_now()
-    t_end = int(os.getenv("VAL_END_MS", str(now)))
-    t_start = int(os.getenv("VAL_START_MS", str(t_end - 24 * 3600 * 1000)))
 
     symbols_env = os.getenv("VAL_SYMBOLS", "").strip()
 
@@ -500,6 +498,26 @@ def main():
             t_start=t_start,
             t_end=t_end,
         )
+
+
+def run_validation_daily(start: datetime, end: datetime):
+    """Run validation for the same analysis window as daily cron.
+
+    Validation errors are isolated and must not crash the whole daily run.
+    """
+    try:
+        t_start = int(start.timestamp() * 1000)
+        t_end = int(end.timestamp() * 1000)
+        run_validation_runner(t_start=t_start, t_end=t_end)
+    except Exception as err:
+        print(f"[validation] skipped due to error: {err}", flush=True)
+
+
+def main():
+    now = ms_now()
+    t_end = int(os.getenv("VAL_END_MS", str(now)))
+    t_start = int(os.getenv("VAL_START_MS", str(t_end - 24 * 3600 * 1000)))
+    run_validation_runner(t_start=t_start, t_end=t_end)
 
 
 if __name__ == "__main__":
