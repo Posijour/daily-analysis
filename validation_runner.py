@@ -23,6 +23,11 @@ HORIZONS_H = [1, 6, 12]
 # ---- Dispersion thresholds (из dispersion.txt) ----
 RISK_THRESHOLDS = {"LOW": 0.05, "MEDIUM": 0.15}
 
+# ---- Sampling ----
+# Разрежение точек t (в минутах). Например 15 = брать точки не чаще чем раз в 15 минут.
+# Если 0 или <=0 — без разрежения.
+VAL_STEP_MINUTES = int(os.getenv("VAL_STEP_MINUTES", "0"))
+
 
 # ----------------- Supabase helpers -----------------
 def sb_headers():
@@ -86,16 +91,21 @@ def pair_dispersion(vals: Dict[str, Any], a: str, b: str, mode: str) -> str:
     return categorical_dispersion([str(vals[a]), str(vals[b])])
 
 
+def downsample_times(times_ms: List[int], step_minutes: int) -> List[int]:
+    if step_minutes <= 0:
+        return times_ms
+    step_ms = step_minutes * 60 * 1000
+    out: List[int] = []
+    last: Optional[int] = None
+    for t in times_ms:
+        if last is None or (t - last) >= step_ms:
+            out.append(t)
+            last = t
+    return out
+
+
 # ----------------- Load logs -----------------
 def load_logs(event: str, ts_from: int, ts_to: int) -> List[Dict[str, Any]]:
-    # Supabase filter syntax: ts=gte.xxx & ts=lt.yyy & event=eq.risk_eval
-    params = {
-        "select": "ts,event,symbol,data",
-        "event": f"eq.{event}",
-        "ts": f"gte.{ts_from}",
-        "ts": f"gte.{ts_from}",  # overwritten? -> we'll pass as separate keys below
-    }
-    # requests doesn't allow duplicate keys easily; do it like this:
     url = f"{SUPABASE_URL}/rest/v1/{LOGS_TABLE}"
     r = requests.get(
         url,
@@ -227,13 +237,12 @@ def compute_dispersion_at(
         if ar is not None:
             risk_vals[w] = ar
 
-        # В твоём файле structure берётся из aggregate_options(load_okx_market_state) -> dominant_phase.
-        # У нас в okx_market_state есть liquidity_regime и divergence_type.
-        # Берём liquidity_regime как “структуру” (категория). Это близко по смыслу к режиму.
+        # структура: используем okx_liquidity_regime как категорию
         reg = window_mode_from_event(okx_rows_sorted, ts_from, ts_to, "okx_liquidity_regime")
         if reg is not None:
             struct_vals[w] = reg
 
+        # вола: используем vbi_state как категорию (если есть)
         vbi = window_mode_from_event(deribit_rows_sorted, ts_from, ts_to, "vbi_state")
         if vbi is not None:
             vol_vals[w] = vbi
@@ -296,12 +305,16 @@ def run_one_signal(
     t_start: int,
     t_end: int,
 ) -> None:
-    # Для простоты: берём t как все 5-минутные точки risk_eval в диапазоне (по символу)
-    # и определяем signal_flag по правилам S1..S4.
     for H in HORIZONS_H:
         h_ms = H * 3600 * 1000
 
-        # результаты по сегментам: ALL и по каждому символу
+        # --- разный time_end по горизонту ---
+        # чтобы для каждой точки t гарантированно был future t+H внутри общего окна
+        effective_end = t_end - h_ms
+        if effective_end <= t_start:
+            print(f"[validation] SKIP {signal_key} H{H}: effective_end <= t_start", flush=True)
+            continue
+
         buckets = {"ALL": {"with_abs": [], "without_abs": [], "with_cont": [], "without_cont": [], "n_with": 0, "n_without": 0}}
         for s in symbols:
             buckets[s] = {"with_abs": [], "without_abs": [], "with_cont": [], "without_cont": [], "n_with": 0, "n_without": 0}
@@ -311,12 +324,14 @@ def run_one_signal(
             if not series:
                 continue
 
-            # соберём список t из series в диапазоне
-            times = [ts for ts, _ in series if t_start <= ts < t_end]
+            # t-точки в диапазоне [t_start, effective_end)
+            times = [ts for ts, _ in series if t_start <= ts < effective_end]
             if not times:
                 continue
 
-            # для trend_continue нужен ret_prev_1h: цена t-1h -> t
+            # --- разрежение точек t ---
+            times = downsample_times(times, VAL_STEP_MINUTES)
+
             for t in times:
                 p0 = find_price_at_or_after(series, t)
                 p1 = find_price_at_or_after(series, t + h_ms)
@@ -325,12 +340,10 @@ def run_one_signal(
                 if p0 is None or p1 is None or p_prev is None:
                     continue
 
-                # ---- signal flag ----
                 flag = False
 
                 if signal_key == "S1_futures_divergence":
                     # событие дивера близко к t (в пределах 10 минут)
-                    # (можно ужесточить/смягчить)
                     for td in t_points.get(sym, []):
                         if abs(td - t) <= 10 * 60 * 1000:
                             flag = True
@@ -341,18 +354,15 @@ def run_one_signal(
 
                 elif signal_key == "S4_okx_bybit_divergence":
                     st = okx_divergence_strength_at(t, okx_rows)
-                    # “есть дивер” если strength > 0
                     flag = (st is not None and st > 0)
 
                 elif signal_key == "S2_dispersion_low":
                     d = compute_dispersion_at(t, risk_eval_rows, okx_rows, deribit_rows)
-                    # Простой вариант: берём RISK 12h↔1h == LOW
                     flag = (d.get("risk", {}).get("12h_1h") == "LOW")
 
                 else:
                     continue
 
-                # ---- metrics ----
                 ar = abs_ret(p0, p1)
                 prev_ret = (p0 / p_prev) - 1.0
                 next_ret = (p1 / p0) - 1.0
@@ -369,19 +379,17 @@ def run_one_signal(
                         buckets[seg]["without_cont"].append(cont)
                         buckets[seg]["n_without"] += 1
 
-        # ---- write to DB ----
         run_row = {
             "signal_key": signal_key,
             "horizon_hours": H,
             "time_start": t_start,
-            "time_end": t_end,
+            "time_end": effective_end,  # <-- сохраняем реальный end, используемый для горизонта
             "symbols": symbols,
-            "params": {},
+            "params": {"val_step_minutes": VAL_STEP_MINUTES},
             "status": "OK",
         }
 
         try:
-            # insert run -> get id (Prefer: return=representation)
             url = f"{SUPABASE_URL}/rest/v1/validation_runs"
             r = requests.post(
                 url,
@@ -399,7 +407,6 @@ def run_one_signal(
                 with_cont = mean(b["with_cont"])
                 without_cont = mean(b["without_cont"])
 
-                # abs_ret
                 if with_abs is not None and without_abs is not None:
                     results_rows.append({
                         "run_id": run_id,
@@ -411,7 +418,6 @@ def run_one_signal(
                         "delta": with_abs - without_abs,
                     })
 
-                # continue_prob
                 if with_cont is not None and without_cont is not None:
                     results_rows.append({
                         "run_id": run_id,
@@ -426,13 +432,13 @@ def run_one_signal(
             if results_rows:
                 sb_post("validation_results", results_rows)
 
-            # console output (сухо)
             for rr in results_rows:
                 if rr["segment"] == "ALL":
                     print(
                         f"{signal_key} H{H} {rr['metric_key']} "
                         f"with={rr['with_signal']:.6f} without={rr['without_signal']:.6f} "
-                        f"delta={rr['delta']:.6f} n={rr['n']}",
+                        f"delta={rr['delta']:.6f} n={rr['n']} "
+                        f"end_ms={effective_end}",
                         flush=True
                     )
 
@@ -444,45 +450,36 @@ def main():
     if not SUPABASE_URL or not SUPABASE_KEY:
         raise RuntimeError("SUPABASE_URL / SUPABASE_KEY env missing")
 
-    # Период: последние 24 часа (можно задавать env)
     now = ms_now()
     t_end = int(os.getenv("VAL_END_MS", str(now)))
     t_start = int(os.getenv("VAL_START_MS", str(t_end - 24 * 3600 * 1000)))
 
-    # Символы: можно ограничить (env "BTCUSDT,ETHUSDT,..."), иначе возьмём из risk_eval
     symbols_env = os.getenv("VAL_SYMBOLS", "").strip()
 
-    # грузим риски
     risk_eval_rows = load_logs(EV_RISK_EVAL, t_start, t_end)
     price_series = build_price_series(risk_eval_rows)
 
-    symbols = []
     if symbols_env:
         symbols = [s.strip() for s in symbols_env.split(",") if s.strip()]
     else:
         symbols = sorted(list(price_series.keys()))
 
-    # грузим диверы (S1)
     risk_div_rows = load_logs(EV_RISK_DIVERGENCE, t_start, t_end)
     div_times = build_signal_times_by_symbol_risk_divergence(risk_div_rows)
 
-    # грузим market states (S3/S4)
-    bybit_rows = load_logs(EV_BYBIT_STATE, t_start - 48 * 3600 * 1000, t_end)  # чуть шире для ffill
+    bybit_rows = load_logs(EV_BYBIT_STATE, t_start - 48 * 3600 * 1000, t_end)
     okx_rows = load_logs(EV_OKX_STATE, t_start - 48 * 3600 * 1000, t_end)
 
-    # deribit (для dispersion volatility; если нет — будет N/A)
     try:
         deribit_rows = load_logs(EV_DERIBIT, t_start - 48 * 3600 * 1000, t_end)
     except Exception:
         deribit_rows = []
 
-    # гарантируем сортировку
     bybit_rows.sort(key=lambda r: int(r["ts"]))
     okx_rows.sort(key=lambda r: int(r["ts"]))
     deribit_rows.sort(key=lambda r: int(r["ts"]))
     risk_eval_rows.sort(key=lambda r: int(r["ts"]))
 
-    # запускаем 4 сигнала
     signals = [
         ("S1_futures_divergence", div_times),
         ("S2_dispersion_low", {}),
