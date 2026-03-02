@@ -15,6 +15,7 @@ from meta_daily import run_meta_daily
 from twitter_daily import run_twitter_daily
 from telegram_daily import run_telegram_daily
 from internal_aggregates_daily import run_internal_aggregates_daily
+from validation_runner import run_validation_daily
 
 MODULES = [
     ("deribit", run_deribit_daily),
@@ -25,6 +26,7 @@ MODULES = [
     ("twitter", run_twitter_daily),
     ("telegram", run_telegram_daily),
     ("internal_aggregates", run_internal_aggregates_daily),
+    ("validation", run_validation_daily),
 ]
 
 
