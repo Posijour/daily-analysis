@@ -295,6 +295,16 @@ def mean(xs: List[float]) -> Optional[float]:
     return (sum(xs) / len(xs)) if xs else None
 
 
+def event_steps_ms_for_horizon(H: int) -> List[Tuple[str, int]]:
+    if H == 1:
+        return [("15m", 15 * 60 * 1000), ("30m", 30 * 60 * 1000), ("60m", 60 * 60 * 1000)]
+    if H == 6:
+        return [("1h", 1 * 60 * 60 * 1000), ("3h", 3 * 60 * 60 * 1000), ("6h", 6 * 60 * 60 * 1000)]
+    if H == 12:
+        return [("1h", 1 * 60 * 60 * 1000), ("6h", 6 * 60 * 60 * 1000), ("12h", 12 * 60 * 60 * 1000)]
+    return []
+
+
 def run_one_signal(
     signal_key: str,
     symbols: List[str],
@@ -309,6 +319,7 @@ def run_one_signal(
 ) -> None:
     for H in HORIZONS_H:
         h_ms = H * 3600 * 1000
+        event_steps = event_steps_ms_for_horizon(H)
 
         # --- разный time_end по горизонту ---
         # чтобы для каждой точки t гарантированно был future t+H внутри общего окна
@@ -320,6 +331,8 @@ def run_one_signal(
         buckets = {"ALL": {"with_abs": [], "without_abs": [], "with_cont": [], "without_cont": [], "n_with": 0, "n_without": 0}}
         for s in symbols:
             buckets[s] = {"with_abs": [], "without_abs": [], "with_cont": [], "without_cont": [], "n_with": 0, "n_without": 0}
+
+        event_buckets = {label: {"abs": [], "cont": []} for label, _ in event_steps}
 
         for sym in symbols:
             series = price_series.get(sym, [])
@@ -381,6 +394,15 @@ def run_one_signal(
                         buckets[seg]["without_cont"].append(cont)
                         buckets[seg]["n_without"] += 1
 
+                if flag:
+                    for step_label, step_ms in event_steps:
+                        p_step = find_price_at_or_after(series, t + step_ms)
+                        if p_step is None:
+                            continue
+                        step_ret = (p_step / p0) - 1.0
+                        event_buckets[step_label]["abs"].append(abs(step_ret))
+                        event_buckets[step_label]["cont"].append(1.0 if sign(prev_ret) == sign(step_ret) else 0.0)
+
         run_row = {
             "signal_key": signal_key,
             "horizon_hours": H,
@@ -415,6 +437,8 @@ def run_one_signal(
                         "metric_key": "abs_ret",
                         "segment": seg,
                         "n": b["n_with"] + b["n_without"],
+                        "n_with": b["n_with"],
+                        "n_without": b["n_without"],
                         "with_signal": with_abs,
                         "without_signal": without_abs,
                         "delta": with_abs - without_abs,
@@ -426,6 +450,8 @@ def run_one_signal(
                         "metric_key": "continue_prob",
                         "segment": seg,
                         "n": b["n_with"] + b["n_without"],
+                        "n_with": b["n_with"],
+                        "n_without": b["n_without"],
                         "with_signal": with_cont,
                         "without_signal": without_cont,
                         "delta": with_cont - without_cont,
@@ -433,6 +459,27 @@ def run_one_signal(
 
             if results_rows:
                 sb_post("validation_results", results_rows)
+
+            event_rows = []
+            for step_label, _ in event_steps:
+                step_abs = mean(event_buckets[step_label]["abs"])
+                step_cont = mean(event_buckets[step_label]["cont"])
+                if step_abs is None or step_cont is None:
+                    continue
+                event_rows.append({
+                    "run_id": run_id,
+                    "signal_key": signal_key,
+                    "horizon_hours": H,
+                    "segment": "ALL",
+                    "step_label": step_label,
+                    "n": len(event_buckets[step_label]["abs"]),
+                    "avg_abs_ret": step_abs,
+                    "continue_prob": step_cont,
+                })
+
+            if event_rows:
+                sb_post("validation_event_study", event_rows)
+                print(f"{signal_key} H{H} event_study saved rows={len(event_rows)}", flush=True)
 
             for rr in results_rows:
                 if rr["segment"] == "ALL":
