@@ -458,6 +458,7 @@ def run_one_signal(
                     })
 
             if results_rows:
+                print("DEBUG validation_results sample =", results_rows[0], flush=True)
                 sb_post("validation_results", results_rows)
 
             event_rows = []
