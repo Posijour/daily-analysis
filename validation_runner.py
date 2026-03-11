@@ -375,6 +375,10 @@ def run_one_signal(
                     d = compute_dispersion_at(t, risk_eval_rows, okx_rows, deribit_rows)
                     flag = (d.get("risk", {}).get("12h_1h") == "LOW")
 
+                elif signal_key == "S2_dispersion_high":
+                    d = compute_dispersion_at(t, risk_eval_rows, okx_rows, deribit_rows)
+                    flag = (d.get("risk", {}).get("12h_1h") == "HIGH")
+
                 else:
                     continue
 
@@ -529,6 +533,7 @@ def run_validation_runner(t_start: int, t_end: int) -> None:
     signals = [
         ("S1_futures_divergence", div_times),
         ("S2_dispersion_low", {}),
+        ("S2_dispersion_high", {}),
         ("S3_bybit_calm", {}),
         ("S4_okx_bybit_divergence", {}),
     ]
