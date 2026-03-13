@@ -49,5 +49,16 @@ class CrossLayerDailyTests(unittest.TestCase):
         self.assertEqual(payload["event_key"], f"BTC:{ts_to}:{SOURCE_MODE_DAILY_24H}")
 
 
+class CrossLayerJsonSanitizationTests(unittest.TestCase):
+    @patch("cross_layer.supabase_post")
+    def test_persist_cross_layer_event_converts_nan_to_none(self, mock_supabase_post):
+        from cross_layer import _persist_cross_layer_event
+
+        _persist_cross_layer_event({"event_key": "BTC:1:DAILY_24H", "direction": float("nan")})
+
+        payload = mock_supabase_post.call_args.args[1]
+        self.assertIsNone(payload["direction"])
+
+
 if __name__ == "__main__":
     unittest.main()
