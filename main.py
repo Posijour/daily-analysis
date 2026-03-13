@@ -15,6 +15,7 @@ from meta_daily import run_meta_daily
 from twitter_daily import run_twitter_daily
 from telegram_daily import run_telegram_daily
 from validation_runner import run_validation_daily
+from cross_layer import process_cross_layer_daily_window
 
 MODULES = [
     ("deribit", run_deribit_daily),
@@ -55,6 +56,16 @@ def main():
                 log_event("daily.module.failed", run_id=run_id, module=module_name, error=str(err))
             finally:
                 METRICS.stop(module_name)
+
+        ts_from = int(start.timestamp() * 1000)
+        ts_to = int(end.timestamp() * 1000)
+        try:
+            process_cross_layer_daily_window(ts_from, ts_to)
+            module_status["cross_layer"] = "ok"
+            log_event("daily.cross_layer.ok", run_id=run_id)
+        except Exception as err:
+            module_status["cross_layer"] = f"failed_isolated:{type(err).__name__}"
+            log_event("daily.cross_layer.failed", run_id=run_id, error=str(err))
 
     finally:
         try:
