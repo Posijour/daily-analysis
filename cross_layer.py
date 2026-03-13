@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
+import math
 
 import pandas as pd
 
@@ -244,13 +245,27 @@ def _build_base_cross_result(*, ts_unix_ms: int, symbol: str, event_key: str, so
 
 def _to_float_or_none(value) -> float | None:
     if isinstance(value, (int, float)):
-        return float(value)
+        numeric = float(value)
+        return numeric if math.isfinite(numeric) else None
     if isinstance(value, str):
         try:
-            return float(value)
+            numeric = float(value)
+            return numeric if math.isfinite(numeric) else None
         except ValueError:
             return None
     return None
+
+
+def _sanitize_for_json(value):
+    if isinstance(value, dict):
+        return {k: _sanitize_for_json(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_for_json(item) for item in value]
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if pd.isna(value):
+        return None
+    return value
 
 
 def compute_risk_bucket(risk: float | int | None) -> str | None:
@@ -353,7 +368,7 @@ def classify_daily_window_event_cross(*, symbol: str, window_start_ts_ms: int, w
 
 
 def _persist_cross_layer_event(result: dict) -> None:
-    supabase_post("cross_layer_events", result, on_conflict="event_key")
+    supabase_post("cross_layer_events", _sanitize_for_json(result), on_conflict="event_key")
 
 
 def process_cross_layer_daily_window(ts_from: int, ts_to: int) -> dict[str, int]:
