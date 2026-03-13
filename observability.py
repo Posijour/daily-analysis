@@ -20,6 +20,12 @@ def _render_event_message(event: str, fields: dict) -> str:
         module_label = _format_module_name(str(fields.get("module", "module")))
         return f"{module_label} daily failed: {fields.get('error')}"
 
+    if event == "daily.cross_layer.ok":
+        return "Cross-layer daily completed."
+
+    if event == "daily.cross_layer.failed":
+        return f"Cross-layer daily failed: {fields.get('error')}"
+    
     if event == "daily.status_sync.failed":
         return f"Daily job status sync failed: {fields.get('error')}"
 
