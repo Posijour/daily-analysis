@@ -278,24 +278,24 @@ def build_deribit_summary(deribit):
     vbi_score_mean = _safe_float(deribit["vbi_score"].mean() if "vbi_score" in deribit.columns else None)
 
     reason_flags = []
-    if slope_mean > 0.01:
+    if slope_mean > 0.008:
         reason_flags.append("iv_slope_up")
-    elif slope_mean < -0.01:
+    elif slope_mean < -0.008:
         reason_flags.append("iv_slope_down")
 
-    if abs(curvature_mean) < 0.01:
+    if abs(curvature_mean) < 0.008:
         reason_flags.append("curvature_flat")
     elif curvature_mean > 0:
         reason_flags.append("curvature_expanding")
 
     votes = []
-    if slope_mean > 0.012:
+    if slope_mean > 0.010:
         votes.append("expansion")
-    elif slope_mean < -0.012:
+    elif slope_mean < -0.010:
         votes.append("compression")
-    if curvature_mean > 0.015:
+    if curvature_mean > 0.012:
         votes.append("expansion")
-    elif curvature_mean < -0.015:
+    elif curvature_mean < -0.012:
         votes.append("compression")
     if old_state in {"WARM", "BUILDING"}:
         votes.append("warm")
@@ -342,7 +342,7 @@ def build_deribit_summary(deribit):
         summary_class = "no_signal"
     elif "cross_metric_conflict" in reason_flags and strength_score >= 0.2:
         summary_class = "conflict"
-    elif strength_score >= 0.68 and bias_direction not in {"neutral", "unknown"}:
+    elif strength_score >= 0.62 and bias_direction not in {"neutral", "unknown"}:
         summary_class = "strong_bias"
     elif strength_score >= 0.3 and bias_direction not in {"neutral", "unknown"}:
         summary_class = "weak_bias"
