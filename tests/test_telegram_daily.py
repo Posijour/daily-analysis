@@ -32,11 +32,14 @@ class TelegramDailyTests(unittest.TestCase):
         self.assertIn("• Buildups: 17", text)
         self.assertIn("• Regime: CALM", text)
         self.assertIn("Options (Bybit / OKX)", text)
-        self.assertIn("• Short-dated IV: stable", text)
-        self.assertIn("• Skew: neutral", text)
+        self.assertIn("• IV/skew:", text)
         self.assertIn("Deribit (meta)", text)
-        self.assertIn("• Vol term structure flat", text)
-        self.assertIn("• No PRE-BREAK patterns", text)
+        self.assertIn("• Vol state:", text)
+        self.assertIn("• PRE-BREAK: not detected", text)
+        self.assertNotIn("mixed", text.lower())
+        self.assertNotIn("No directional pricing", text)
+        self.assertNotIn("Vol term structure", text)
+        self.assertNotIn("This regime is mixed", text)
         self.assertIn("Market log.", text)
         mock_counter.assert_called_once_with("tg_daily_log")
 
@@ -52,16 +55,18 @@ class TelegramDailyTests(unittest.TestCase):
         ]
 
         text = generate_daily_log(datetime.now(timezone.utc), datetime.now(timezone.utc))
-        self.assertIn("• Vol term structure flat", text)
+        self.assertIn("• Vol state:", text)
 
     @patch("telegram_daily.supabase_post")
     @patch("telegram_daily.generate_daily_log", return_value="daily telegram text")
+    @patch("telegram_daily.AUTO_POST_TELEGRAM", False)
     def test_run_telegram_daily_posts_log(self, _mock_generate, mock_supabase_post):
         run_telegram_daily(datetime.now(timezone.utc), datetime.now(timezone.utc))
         mock_supabase_post.assert_called_once_with("telegram_logs", {"text": "daily telegram text"})
 
     @patch("telegram_daily.supabase_post")
     @patch("telegram_daily.generate_daily_log", return_value="daily telegram text")
+    @patch("telegram_daily.AUTO_POST_TELEGRAM", False)
     def test_run_telegram_daily_raises_on_rls_error(self, _mock_generate, mock_supabase_post):
         err = HTTPError("forbidden")
         err.response = type("Resp", (), {"status_code": 403, "text": "new row violates row-level security policy"})()
