@@ -177,7 +177,7 @@ def build_options_summary(options_market):
     elif mci_mean < -0.1:
         reason_flags.append("mci_negative")
 
-    if confidence_mean < 0.45:
+    if confidence_mean < 0.35:
         reason_flags.append("low_confidence")
 
     if slope_mean > 0.01:
@@ -213,7 +213,7 @@ def build_options_summary(options_market):
     skew_strength = _mean_abs(options_market, "skew", 0.12)
     credit_strength = _mean_abs(options_market, "credit", 0.12)
     mci_strength = _clamp(abs(mci_mean) / 1.0)
-    slope_strength = _clamp(abs(slope_mean) / 0.05)
+    slope_strength = _clamp(abs(slope_mean) / 0.035)
     confidence_component = _clamp(confidence_mean)
 
     conflict = "near_mid_conflict" in reason_flags or "bybit_okx_conflict" in reason_flags
@@ -310,7 +310,7 @@ def build_deribit_summary(deribit):
             counts[item] = counts.get(item, 0) + 1
         top = max(counts, key=counts.get)
         agreement = counts[top] / len(votes)
-        if agreement < 0.6 and len(counts) > 1:
+        if agreement < 0.5 and len(counts) > 1:
             reason_flags.append("cross_metric_conflict")
             bias_direction = "unknown"
         else:
@@ -342,7 +342,7 @@ def build_deribit_summary(deribit):
         summary_class = "no_signal"
     elif "cross_metric_conflict" in reason_flags and strength_score >= 0.2:
         summary_class = "conflict"
-    elif strength_score >= 0.62 and bias_direction not in {"neutral", "unknown"}:
+    elif strength_score >= 0.65 and bias_direction not in {"neutral", "unknown"}:
         summary_class = "strong_bias"
     elif strength_score >= 0.3 and bias_direction not in {"neutral", "unknown"}:
         summary_class = "weak_bias"
